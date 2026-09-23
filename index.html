@@ -37,6 +37,10 @@ body{font-family:Arial,sans-serif}
   border-radius:5px;
   cursor:pointer;
 }
+
+.traveler-label{font-weight:bold;color:#8b0000;border:1px solid #c62828;border-radius:5px;background:rgba(255,255,255,.94);box-shadow:0 1px 5px rgba(0,0,0,.2)}
+.animation-control{background:rgba(255,255,255,.95);padding:8px 10px;border-radius:7px;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.animation-control button{border:0;background:#c62828;color:white;padding:6px 10px;border-radius:5px;cursor:pointer}
 </style>
 </head>
 <body>
@@ -66,93 +70,78 @@ const historical = L.geoJSON(borders, {
 
 // Основная линия маршрута
 const line = L.geoJSON(route, {
-  style: {
-    color:'#c62828',
-    weight:5,
-    opacity:.22
-  }
+  style:{color:'#c62828',weight:5,opacity:.25}
 }).addTo(map);
 
-// Анимированный пунктир — эффект движения по маршруту
 const animatedLine = L.geoJSON(route, {
-  style: {
-    color:'#c62828',
-    weight:5,
-    opacity:.95,
-    dashArray:'12 18',
-    lineCap:'round'
-  }
+  style:{color:'#c62828',weight:5,opacity:.95}
 }).addTo(map);
 
-const routeCoords = route.geometry.coordinates.map(c => [c[1], c[0]]);
+const routeCoords = route.geometry.coordinates.map(c => [c[1],c[0]]);
 
-// Движущийся автомобиль Нагеля
 const traveler = L.circleMarker(routeCoords[0], {
-  radius:8,
-  color:'#8b0000',
-  weight:2,
-  fillColor:'#ff3333',
-  fillOpacity:1
+  radius:8,color:'#8b0000',weight:2,fillColor:'#ff3333',fillOpacity:1
 }).addTo(map);
 
 const travelerLabel = L.tooltip({
-  permanent:true,
-  direction:'top',
-  offset:[0,-10],
-  className:'traveler-label'
+  permanent:true,direction:'top',offset:[0,-10],className:'traveler-label'
 }).setContent('А. Нагель').setLatLng(routeCoords[0]).addTo(map);
 
-function interpolate(a,b,t) {
-  return [a[0] + (b[0]-a[0])*t, a[1] + (b[1]-a[1])*t];
+function interpolate(a,b,t){
+  return [a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t];
 }
 
-let segment = 0;
-let progress = 0;
-let running = true;
-let last = performance.now();
+let segment=0, progress=0, running=true, last=performance.now();
+let animationFrame=null;
+const totalDuration=45000;
+const segmentDuration=totalDuration/(routeCoords.length-1);
 
-// Скорость движения по маршруту
-const speed = 0.000055;
-
-function animateNagel(now) {
-  const dt = now-last;
-  last=now;
-
-  if (running) {
-    progress += dt*speed;
-
-    while (progress >= 1 && segment < routeCoords.length-2) {
-      progress -= 1;
-      segment++;
-    }
-
-    if (segment >= routeCoords.length-1) {
-      traveler.setLatLng(routeCoords[routeCoords.length-1]);
-      travelerLabel.setLatLng(routeCoords[routeCoords.length-1]);
-      running=false;
-      document.getElementById('toggleAnim').textContent='Продолжить';
-      return;
-    }
-
-    const p = interpolate(routeCoords[segment], routeCoords[segment+1], progress);
-    traveler.setLatLng(p);
-    travelerLabel.setLatLng(p);
+function animateNagel(now){
+  if(!running){
+    last=now;
+    animationFrame=requestAnimationFrame(animateNagel);
+    return;
   }
 
-  requestAnimationFrame(animateNagel);
-}
-requestAnimationFrame(animateNagel);
+  const dt=now-last;
+  last=now;
+  progress += dt/segmentDuration;
 
-// Анимация штрихов маршрута
-let dashOffset = 0;
-function animateDash() {
-  dashOffset -= 1;
-  animatedLine.eachLayer(layer => {
-    if (layer._path) layer._path.style.strokeDashoffset = dashOffset;
-  });
-  requestAnimationFrame(animateDash);
+  while(progress>=1 && segment<routeCoords.length-2){
+    progress-=1;
+    segment++;
+  }
+
+  if(segment>=routeCoords.length-2 && progress>=1){
+    const p=routeCoords[routeCoords.length-1];
+    traveler.setLatLng(p);
+    travelerLabel.setLatLng(p);
+    running=false;
+    const b=document.getElementById('toggleAnim');
+    if(b)b.textContent='Продолжить';
+    return;
+  }
+
+  const p=interpolate(routeCoords[segment],routeCoords[segment+1],progress);
+  traveler.setLatLng(p);
+  travelerLabel.setLatLng(p);
+  animationFrame=requestAnimationFrame(animateNagel);
 }
-requestAnimationFrame(animateDash);
+
+function restartNagel(){
+  if(animationFrame) cancelAnimationFrame(animationFrame);
+  segment=0;
+  progress=0;
+  running=true;
+  last=performance.now();
+  traveler.setLatLng(routeCoords[0]);
+  travelerLabel.setLatLng(routeCoords[0]);
+  const b=document.getElementById('toggleAnim');
+  if(b)b.textContent='Пауза';
+  animationFrame=requestAnimationFrame(animateNagel);
+}
+
+animationFrame=requestAnimationFrame(animateNagel);
 
 const markers = L.geoJSON(points, {
   pointToLayer: function(feature, latlng) {
@@ -228,6 +217,32 @@ setTimeout(() => {
     requestAnimationFrame(animateNagel);
   };
 }, 0);
+
+const animationControl=L.control({position:'topleft'});
+animationControl.onAdd=function(){
+  const d=L.DomUtil.create('div','animation-control');
+  d.innerHTML='<button id="toggleAnim">Пауза</button> <button id="restartAnim">Сначала</button>';
+  L.DomEvent.disableClickPropagation(d);
+  return d;
+};
+animationControl.addTo(map);
+
+setTimeout(function(){
+  const toggle=document.getElementById('toggleAnim');
+  const restart=document.getElementById('restartAnim');
+
+  toggle.onclick=function(){
+    running=!running;
+    this.textContent=running?'Пауза':'Продолжить';
+    if(running){
+      last=performance.now();
+      if(animationFrame) cancelAnimationFrame(animationFrame);
+      animationFrame=requestAnimationFrame(animateNagel);
+    }
+  };
+
+  restart.onclick=function(){restartNagel();};
+},100);
 </script>
 </body>
 </html>
