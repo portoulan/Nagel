@@ -218,31 +218,6 @@ setTimeout(() => {
   };
 }, 0);
 
-const animationControl=L.control({position:'topleft'});
-animationControl.onAdd=function(){
-  const d=L.DomUtil.create('div','animation-control');
-  d.innerHTML='<button id="toggleAnim">Пауза</button> <button id="restartAnim">Сначала</button>';
-  L.DomEvent.disableClickPropagation(d);
-  return d;
-};
-animationControl.addTo(map);
-
-setTimeout(function(){
-  const toggle=document.getElementById('toggleAnim');
-  const restart=document.getElementById('restartAnim');
-
-  toggle.onclick=function(){
-    running=!running;
-    this.textContent=running?'Пауза':'Продолжить';
-    if(running){
-      last=performance.now();
-      if(animationFrame) cancelAnimationFrame(animationFrame);
-      animationFrame=requestAnimationFrame(animateNagel);
-    }
-  };
-
-  restart.onclick=function(){restartNagel();};
-},100);
 </script>
 </body>
 </html>
